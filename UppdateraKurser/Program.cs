@@ -6,6 +6,17 @@ using Newtonsoft.Json;
 using System.Configuration;
 
 
+/* Den större delan av aktiekurser använder jag finnhub.io för att uppdatera då jag får göra mer frekvent API anrop än vad man är tillåten mot Alpha Vantage.
+ * Däremot så har inte finnhub alla svenska aktier, de som de saknar hämtar jag istället med Alpha Vantage
+ * Dock så måste jag ändra symbolen från .ST till .STO i tabellen för att detta ska funka.
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ */
+
 namespace UppdateraKurser
 {
     static class GlobalVars
@@ -14,6 +25,7 @@ namespace UppdateraKurser
         public static string quote = "\"";
         public static string TablesToUpdate = "";
         public static int Delay = 0;
+        public static string SpecialAktier = "";
     }
 
 
@@ -50,6 +62,18 @@ namespace UppdateraKurser
             public decimal PC { get; set; }
         }
 
+        public class AlphaVantageData
+        {
+            public DateTime Timestamp { get; set; }
+            public decimal Open { get; set; }
+
+            public decimal High { get; set; }
+            public decimal Low { get; set; }
+
+            public decimal Close { get; set; }
+            public decimal Volume { get; set; }
+        }
+
         public static void GetStockPriceForTable(string table)
         {
 
@@ -82,7 +106,6 @@ namespace UppdateraKurser
 
                             try
                             {
-
                                 string url = $"https://finnhub.io/api/v1/quote?symbol={symbol}&token={apiKey}";
 
                                 string responseBody = client.DownloadString(url);
@@ -106,6 +129,87 @@ namespace UppdateraKurser
                 Logger("ERROR", ex.Message);
             }
 
+        }
+
+        public static void GetStockPriceSpecial(string table)
+        {
+            //  Welcome to Alpha Vantage! Here is your API key: APA3UI90FWXJA9IM
+            //  string ApiURL = "https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=MSFT&interval=1min&apikey=APA3UI90FWXJA9IM";
+            // NOTERA: För att använda detta så måste stockholms börsens aktier markeras med STO och inte ST
+
+            GlobalVars.SpecialAktier = ConfigurationManager.AppSettings["SpecialAktier"];
+            string mysqlcmnd = "";
+
+            if (GlobalVars.SpecialAktier.Contains("_"))
+            {
+                mysqlcmnd = "SELECT * FROM money." + table + " WHERE Symbol = ";
+                string[] aktier = GlobalVars.SpecialAktier.Split('_');
+                string aktietemp = aktier[0];
+
+                for(int i=1;i < aktier.Length;i++)
+                {
+                    aktietemp = aktietemp + " + " + GlobalVars.quote +  aktier[i] + GlobalVars.quote;
+                }
+
+                mysqlcmnd = mysqlcmnd + aktietemp + ";";
+            }
+            else
+            { 
+                mysqlcmnd = "SELECT * FROM money." + table + " WHERE Symbol = "+ GlobalVars.quote + GlobalVars.SpecialAktier + GlobalVars.quote + ";";
+            }
+
+
+            DataTable dt = new DataTable();
+            var client = new System.Net.WebClient();
+            var apiKey = "APA3UI90FWXJA9IM";
+
+
+            try
+            {
+                using (MySqlConnection connection = new MySqlConnection(GlobalVars.conString))
+                {
+                    connection.Open();
+
+                    using (MySqlCommand myCommand = new MySqlCommand(mysqlcmnd, connection))
+                    {
+
+                        using (MySqlDataAdapter mysqlDa = new MySqlDataAdapter(myCommand))
+                            mysqlDa.Fill(dt);
+
+                        foreach (DataRow row in dt.Rows)
+                        {
+                            string symbol = row[9].ToString();
+
+                            try
+                            {
+                                string url = $"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=1min&apikey={apiKey}&datatype=csv";
+                                string responseBody = client.DownloadString(url);
+                                string[] tmpString = responseBody.Split(new string[] {System.Environment.NewLine},StringSplitOptions.None);
+                                tmpString = tmpString[1].Split(',');
+                                decimal CurrentOpenPrice = decimal.Parse(tmpString[1]);
+
+                                Logger("DEBUG", CurrentOpenPrice.ToString());
+
+                                System.Threading.Thread.Sleep(GlobalVars.Delay);
+                                UpdateStock(table, symbol, CurrentOpenPrice);
+                                Logger("DEBUG", table + "." + symbol + " " + CurrentOpenPrice);
+
+                                System.Threading.Thread.Sleep(1000);
+
+
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger("ERROR", symbol + " " + ex.Message);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger("ERROR", ex.Message);
+            }
         }
 
         public static void UpdateStock(string table, string symbol, decimal Kurs)
@@ -159,20 +263,24 @@ namespace UppdateraKurser
             GlobalVars.conString = ConfigurationManager.AppSettings["MySqlConnectionString"];
             GlobalVars.TablesToUpdate = ConfigurationManager.AppSettings["TablesToUpdate"];
             GlobalVars.Delay = Int32.Parse(ConfigurationManager.AppSettings["Delay"]);
-
-
+            
             if (GlobalVars.TablesToUpdate.Contains("_"))
             {
                 string[] tables = GlobalVars.TablesToUpdate.Split('_');
 
                 foreach (string table in tables)
                 {
-                    GetStockPriceForTable(table);
+                  //  GetStockPriceForTable(table);
+                    GetStockPriceSpecial(table);
                 }
+
+                //  <add key="TablesToUpdate"  value="AF_KF_ISK_IPS_TJP" />
+               // <add key="SpecialAktier"  value="PARA.STO_CLS-B.STO_NENT-B.STO" />
 
             }
             else
-                GetStockPriceForTable(GlobalVars.TablesToUpdate);
+                //GetStockPriceForTable(GlobalVars.TablesToUpdate);
+                GetStockPriceSpecial(GlobalVars.TablesToUpdate);
         }
 
     }
