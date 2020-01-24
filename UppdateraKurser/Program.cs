@@ -28,7 +28,6 @@ namespace UppdateraKurser
         public static string SpecialAktier = "";
     }
 
-
     public class Program
     {
         public static void Logger(string type, string message)
@@ -144,11 +143,11 @@ namespace UppdateraKurser
             {
                 mysqlcmnd = "SELECT * FROM money." + table + " WHERE Symbol = ";
                 string[] aktier = GlobalVars.SpecialAktier.Split('_');
-                string aktietemp = aktier[0];
+                string aktietemp = GlobalVars.quote + aktier[0] + GlobalVars.quote;
 
                 for(int i=1;i < aktier.Length;i++)
                 {
-                    aktietemp = aktietemp + " + " + GlobalVars.quote +  aktier[i] + GlobalVars.quote;
+                    aktietemp = aktietemp + " OR Symbol = " + GlobalVars.quote + aktier[i] + GlobalVars.quote;
                 }
 
                 mysqlcmnd = mysqlcmnd + aktietemp + ";";
@@ -174,21 +173,20 @@ namespace UppdateraKurser
                     {
 
                         using (MySqlDataAdapter mysqlDa = new MySqlDataAdapter(myCommand))
-                            mysqlDa.Fill(dt);
+                        mysqlDa.Fill(dt);
 
                         foreach (DataRow row in dt.Rows)
                         {
                             string symbol = row[9].ToString();
+                            string responseBody = "";
 
                             try
                             {
                                 string url = $"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=1min&apikey={apiKey}&datatype=csv";
-                                string responseBody = client.DownloadString(url);
+                                responseBody = client.DownloadString(url);
                                 string[] tmpString = responseBody.Split(new string[] {System.Environment.NewLine},StringSplitOptions.None);
                                 tmpString = tmpString[1].Split(',');
                                 decimal CurrentOpenPrice = decimal.Parse(tmpString[1]);
-
-                                Logger("DEBUG", CurrentOpenPrice.ToString());
 
                                 System.Threading.Thread.Sleep(GlobalVars.Delay);
                                 UpdateStock(table, symbol, CurrentOpenPrice);
@@ -200,7 +198,7 @@ namespace UppdateraKurser
                             }
                             catch (Exception ex)
                             {
-                                Logger("ERROR", symbol + " " + ex.Message);
+                                Logger("ERROR", table + "." + symbol + " " + responseBody + " " + ex.Message);
                             }
                         }
                     }
