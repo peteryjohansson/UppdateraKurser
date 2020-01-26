@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using System.Configuration;
 
 
+
 /* Den större delan av aktiekurser använder jag finnhub.io för att uppdatera då jag får göra mer frekvent API anrop än vad man är tillåten mot Alpha Vantage.
  * Däremot så har inte finnhub alla svenska aktier, de som de saknar hämtar jag istället med Alpha Vantage
  * Dock så måste jag ändra symbolen från .ST till .STO i tabellen för att detta ska funka.
@@ -30,6 +31,7 @@ namespace UppdateraKurser
 
     public class Program
     {
+
         public static void Logger(string type, string message)
         {
             try
@@ -113,7 +115,7 @@ namespace UppdateraKurser
 
                                 System.Threading.Thread.Sleep(GlobalVars.Delay);
                                 UpdateStock(table, symbol, CurrentOpenPrice);
-                                Logger("DEBUG", table + "." + symbol + " " + CurrentOpenPrice);
+                                Logger("INFO", table + "." + symbol + " " + CurrentOpenPrice);
                             }
                             catch (Exception ex)
                             {
@@ -258,27 +260,27 @@ namespace UppdateraKurser
 
         static void Main(string[] args)
         {
+
             GlobalVars.conString = ConfigurationManager.AppSettings["MySqlConnectionString"];
             GlobalVars.TablesToUpdate = ConfigurationManager.AppSettings["TablesToUpdate"];
             GlobalVars.Delay = Int32.Parse(ConfigurationManager.AppSettings["Delay"]);
-            
+
             if (GlobalVars.TablesToUpdate.Contains("_"))
             {
                 string[] tables = GlobalVars.TablesToUpdate.Split('_');
 
                 foreach (string table in tables)
                 {
-                  //  GetStockPriceForTable(table);
+                    GetStockPriceForTable(table);
                     GetStockPriceSpecial(table);
                 }
 
-                //  <add key="TablesToUpdate"  value="AF_KF_ISK_IPS_TJP" />
-               // <add key="SpecialAktier"  value="PARA.STO_CLS-B.STO_NENT-B.STO" />
-
             }
             else
-                //GetStockPriceForTable(GlobalVars.TablesToUpdate);
+            {
+                GetStockPriceForTable(GlobalVars.TablesToUpdate);
                 GetStockPriceSpecial(GlobalVars.TablesToUpdate);
+            }
         }
 
     }
